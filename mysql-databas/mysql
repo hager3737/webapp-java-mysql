@@ -1,0 +1,230 @@
+-- Starta om databasen från noll
+DROP DATABASE IF EXISTS webbshop;
+CREATE DATABASE webbshop
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_0900_ai_ci;
+USE webbshop;
+
+-- Pausa FK-kontroller medan vi bygger upp allt
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- ---------- Grundtabeller ----------
+CREATE TABLE Marke (
+  MarkeID INT AUTO_INCREMENT PRIMARY KEY,
+  Namn VARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE Kategori (
+  KategoriID INT AUTO_INCREMENT PRIMARY KEY,
+  Namn VARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE Kund (
+  KundID INT AUTO_INCREMENT PRIMARY KEY,
+  Namn   VARCHAR(100) NOT NULL,
+  Adress VARCHAR(255),
+  Ort    VARCHAR(100) NOT NULL,
+  Epost  VARCHAR(100) NOT NULL UNIQUE
+);
+
+-- ---------- Varor ----------
+CREATE TABLE Vara (
+  VaraID INT AUTO_INCREMENT PRIMARY KEY,
+  Namn   VARCHAR(120) NOT NULL,
+  Storlek VARCHAR(20),
+  Farg    VARCHAR(30),          -- 'Farg' utan å
+  Pris    DECIMAL(10,2) NOT NULL,
+  AntalILager INT NOT NULL DEFAULT 0,
+  MarkeID INT NOT NULL,
+  FOREIGN KEY (MarkeID) REFERENCES Marke(MarkeID)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- M:N mellan Vara och Kategori
+CREATE TABLE VaraKategori (
+  VaraID INT NOT NULL,
+  KategoriID INT NOT NULL,
+  PRIMARY KEY (VaraID, KategoriID),
+  FOREIGN KEY (VaraID) REFERENCES Vara(VaraID)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (KategoriID) REFERENCES Kategori(KategoriID)
+    ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- ---------- Beställningar ----------
+CREATE TABLE Bestallning (
+  BestallningsID INT AUTO_INCREMENT PRIMARY KEY,
+  Datum DATE NOT NULL,
+  KundID INT NOT NULL,
+  FOREIGN KEY (KundID) REFERENCES Kund(KundID)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE TABLE Bestallningsrad (
+  RadID INT AUTO_INCREMENT PRIMARY KEY,
+  BestallningsID INT NOT NULL,
+  VaraID INT NOT NULL,
+  Antal INT NOT NULL,
+  PrisVidKop DECIMAL(10,2),     -- priset vid köpet (låser historik)
+  CHECK (Antal > 0),
+  FOREIGN KEY (BestallningsID) REFERENCES Bestallning(BestallningsID)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (VaraID) REFERENCES Vara(VaraID)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+-- Återaktivera FK-kontroller
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- ---------- Seeddata ----------
+
+-- Märken
+INSERT INTO Marke (Namn) VALUES
+ ('SweetPants'), ('NordicWear'), ('Acme'), ('UrbanFit');
+
+-- Kategorier
+INSERT INTO Kategori (Namn) VALUES
+ ('Byxor'), ('Tröjor'), ('Klänningar'), ('Sportswear'), ('Casual');
+
+-- Kunder
+INSERT INTO Kund (Namn, Adress, Ort, Epost) VALUES
+ ('Anna Andersson', 'Storgatan 1',  'Stockholm', 'anna@example.com'),
+ ('Bo Berg',        'Avenyn 2',     'Göteborg',  'bo@example.com'),
+ ('Carin Carlsson', 'Möllev. 3',    'Malmö',     'carin@example.com'),
+ ('David Dahl',     'Fyrisv. 4',    'Uppsala',   'david@example.com'),
+ ('Eva Ek',         'Hornsg. 5',    'Stockholm', 'eva@example.com');
+
+-- Varor (minst en som är: svarta byxor, strl 38, märke SweetPants)
+INSERT INTO Vara (Namn, Storlek, Farg, Pris, AntalILager, MarkeID)
+VALUES
+ ('Byxa Classic 38', '38', 'Svart', 799.00, 100, (SELECT MarkeID FROM Marke WHERE Namn='SweetPants')),
+ ('Byxa Classic 40', '40', 'Svart', 799.00, 100, (SELECT MarkeID FROM Marke WHERE Namn='SweetPants')),
+ ('T-shirt Basic M', 'M',  'Vit',   199.00, 300, (SELECT MarkeID FROM Marke WHERE Namn='NordicWear')),
+ ('Hoodie Cozy L',   'L',  'Grå',   499.00, 150, (SELECT MarkeID FROM Marke WHERE Namn='UrbanFit')),
+ ('Klänning Sommar S','S', 'Röd',   899.00,  50, (SELECT MarkeID FROM Marke WHERE Namn='Acme')),
+ ('Joggers Flex M',  'M',  'Svart', 599.00, 120, (SELECT MarkeID FROM Marke WHERE Namn='UrbanFit')),
+ ('Strumpor 3-pack', 'One','Svart',  99.00, 500, (SELECT MarkeID FROM Marke WHERE Namn='NordicWear')),
+ ('Byxa Slim 38',    '38', 'Blå',   899.00,  80, (SELECT MarkeID FROM Marke WHERE Namn='SweetPants'));
+
+-- Koppla varor till kategorier (utan att hårdkoda ID)
+INSERT INTO VaraKategori (VaraID, KategoriID)
+SELECT v.VaraID, k.KategoriID FROM Vara v JOIN Kategori k
+  ON k.Namn IN ('Byxor','Casual') WHERE v.Namn='Byxa Classic 38';
+INSERT INTO VaraKategori (VaraID, KategoriID)
+SELECT v.VaraID, k.KategoriID FROM Vara v JOIN Kategori k
+  ON k.Namn IN ('Byxor','Casual') WHERE v.Namn='Byxa Classic 40';
+INSERT INTO VaraKategori (VaraID, KategoriID)
+SELECT v.VaraID, k.KategoriID FROM Vara v JOIN Kategori k
+  ON k.Namn IN ('Tröjor','Casual') WHERE v.Namn='T-shirt Basic M';
+INSERT INTO VaraKategori (VaraID, KategoriID)
+SELECT v.VaraID, k.KategoriID FROM Vara v JOIN Kategori k
+  ON k.Namn IN ('Tröjor','Casual') WHERE v.Namn='Hoodie Cozy L';
+INSERT INTO VaraKategori (VaraID, KategoriID)
+SELECT v.VaraID, k.KategoriID FROM Vara v JOIN Kategori k
+  ON k.Namn IN ('Klänningar') WHERE v.Namn='Klänning Sommar S';
+INSERT INTO VaraKategori (VaraID, KategoriID)
+SELECT v.VaraID, k.KategoriID FROM Vara v JOIN Kategori k
+  ON k.Namn IN ('Byxor','Sportswear') WHERE v.Namn='Joggers Flex M';
+INSERT INTO VaraKategori (VaraID, KategoriID)
+SELECT v.VaraID, k.KategoriID FROM Vara v JOIN Kategori k
+  ON k.Namn IN ('Sportswear','Casual') WHERE v.Namn='Strumpor 3-pack';
+INSERT INTO VaraKategori (VaraID, KategoriID)
+SELECT v.VaraID, k.KategoriID FROM Vara v JOIN Kategori k
+  ON k.Namn IN ('Byxor','Sportswear','Casual') WHERE v.Namn='Byxa Slim 38';
+
+-- Beställningar (spridda över månader för månadsfrågan)
+INSERT INTO Bestallning (Datum, KundID)
+SELECT '2025-05-12', KundID FROM Kund WHERE Namn='Anna Andersson';
+INSERT INTO Bestallning (Datum, KundID)
+SELECT '2025-05-25', KundID FROM Kund WHERE Namn='Bo Berg';
+INSERT INTO Bestallning (Datum, KundID)
+SELECT '2025-06-03', KundID FROM Kund WHERE Namn='Carin Carlsson';
+INSERT INTO Bestallning (Datum, KundID)
+SELECT '2025-06-20', KundID FROM Kund WHERE Namn='David Dahl';
+INSERT INTO Bestallning (Datum, KundID)
+SELECT '2025-07-02', KundID FROM Kund WHERE Namn='Eva Ek';
+INSERT INTO Bestallning (Datum, KundID)
+SELECT '2025-07-15', KundID FROM Kund WHERE Namn='Anna Andersson';
+INSERT INTO Bestallning (Datum, KundID)
+SELECT '2025-08-01', KundID FROM Kund WHERE Namn='Bo Berg';
+
+-- Rader per beställning (slår upp ID utifrån namn/datum/produkt)
+-- 2025-05-12 (Anna): Byxa Classic 38 (1), T-shirt Basic M (2)
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Byxa Classic 38'
+WHERE k.Namn='Anna Andersson' AND b.Datum='2025-05-12';
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 2, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='T-shirt Basic M'
+WHERE k.Namn='Anna Andersson' AND b.Datum='2025-05-12';
+
+-- 2025-05-25 (Bo): Strumpor (3), T-shirt (1)
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 3, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Strumpor 3-pack'
+WHERE k.Namn='Bo Berg' AND b.Datum='2025-05-25';
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='T-shirt Basic M'
+WHERE k.Namn='Bo Berg' AND b.Datum='2025-05-25';
+
+-- 2025-06-03 (Carin): Klänning (1), Hoodie (1)
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Klänning Sommar S'
+WHERE k.Namn='Carin Carlsson' AND b.Datum='2025-06-03';
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Hoodie Cozy L'
+WHERE k.Namn='Carin Carlsson' AND b.Datum='2025-06-03';
+
+-- 2025-06-20 (David): Joggers (1), T-shirt (1)
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Joggers Flex M'
+WHERE k.Namn='David Dahl' AND b.Datum='2025-06-20';
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='T-shirt Basic M'
+WHERE k.Namn='David Dahl' AND b.Datum='2025-06-20';
+
+-- 2025-07-02 (Eva): Byxa Slim 38 (1), Byxa Classic 38 (1)
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Byxa Slim 38'
+WHERE k.Namn='Eva Ek' AND b.Datum='2025-07-02';
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Byxa Classic 38'
+WHERE k.Namn='Eva Ek' AND b.Datum='2025-07-02';
+
+-- 2025-07-15 (Anna): Hoodie (1), T-shirt (1)
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Hoodie Cozy L'
+WHERE k.Namn='Anna Andersson' AND b.Datum='2025-07-15';
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='T-shirt Basic M'
+WHERE k.Namn='Anna Andersson' AND b.Datum='2025-07-15';
+
+-- 2025-08-01 (Bo): Byxa Classic 40 (1)
+INSERT INTO Bestallningsrad (BestallningsID, VaraID, Antal, PrisVidKop)
+SELECT b.BestallningsID, v.VaraID, 1, v.Pris
+FROM Bestallning b JOIN Kund k ON b.KundID=k.KundID
+JOIN Vara v ON v.Namn='Byxa Classic 40'
+WHERE k.Namn='Bo Berg' AND b.Datum='2025-08-01';
+
